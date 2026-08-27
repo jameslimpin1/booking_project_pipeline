@@ -114,7 +114,7 @@ def build_conv_profile_data(con):
             end
         """,
     }
-    return {
+    data = {
         key: rows_and_cols(con, f"""
             select
                 activity_month as month,
@@ -126,6 +126,22 @@ def build_conv_profile_data(con):
         """)
         for key, expr in dimension_exprs.items()
     }
+    # Exact (non-bucketed) monthly totals for the hero stats above the panels
+    # -- CSAT/message-count are bucketed for display in the panels above, so
+    # an average computed from those buckets would only be approximate.
+    data["monthly_totals"] = rows_and_cols(con, """
+        select
+            activity_month as month,
+            count(*) as conversations,
+            sum(case when booking_status = 'cancelled' then 1 else 0 end) as cancelled,
+            sum(coalesce(csat_score, 0)) as csat_sum,
+            sum(case when csat_score is not null then 1 else 0 end) as csat_count,
+            sum(conversation_message_count) as msg_sum
+        from main_marts.mart_booking_loss_events
+        group by 1
+        order by 1
+    """)
+    return data
 
 
 def build_dd_data(con):
