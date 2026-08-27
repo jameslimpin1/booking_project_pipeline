@@ -1,0 +1,7 @@
+# dbt / warehouse
+dbt-duckdb==1.11.0
+
+# generate_hotel_chat_data.py (synthetic data generator)
+numpy==2.5.2
+pyarrow==25.0.1
+Faker==40.37.0

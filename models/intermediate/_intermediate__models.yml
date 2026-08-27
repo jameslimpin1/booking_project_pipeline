@@ -1,0 +1,129 @@
+version: 2
+
+models:
+  - name: int_booking_cancellation_risk
+    description: >
+      One row per confirmed booking, with a rule-based composite cancellation-risk
+      score derived from linked conversation/message signals (intent, sentiment,
+      CSAT, escalation, response times). Flags the top decile by risk.
+    columns:
+      - name: booking_id
+        description: Primary key, one row per confirmed booking.
+        tests:
+          - unique
+          - not_null
+      - name: cancellation_risk_score
+        description: Weighted composite risk score in [0, 1]; higher is riskier.
+        tests:
+          - between:
+              min_value: 0
+              max_value: 1
+          - not_constant
+      - name: risk_percentile
+        description: Percentile rank (0-1) of cancellation_risk_score, descending — lower is riskier.
+        tests:
+          - between:
+              min_value: 0
+              max_value: 1
+      - name: is_top_risk_decile
+        description: True for the top 10% of confirmed bookings by cancellation_risk_score.
+
+  - name: int_conversation_log
+    description: >
+      One row per chat message, sequenced within its conversation (message_seq,
+      first/last flags, seconds since previous message). Full event log for every
+      conversation, not just at-risk ones.
+    columns:
+      - name: message_id
+        description: Primary key, one row per message.
+        tests:
+          - unique
+          - not_null
+      - name: message_seq
+        description: 1-indexed position of the message within its conversation.
+        tests:
+          - non_negative
+      - name: seconds_since_prev_message
+        description: Seconds since the previous message in the conversation; null for the first message.
+        tests:
+          - non_negative
+
+  - name: int_conversation_journeys
+    description: >
+      One row per conversation, collapsed from int_conversation_log's message-grain
+      event log up to conversation grain: the full event_journey and
+      sentiment_label_journey strings, opening/closing/average sentiment, and
+      counts of negative messages, escalation handoffs, and delayed replies.
+      Shared base for every "loss point" analysis in the marts layer — add new
+      conversation-level metrics here, not downstream.
+    columns:
+      - name: conversation_id
+        description: Primary key, one row per conversation.
+        tests:
+          - unique
+          - not_null
+      - name: event_journey
+        description: >
+          Ordered '->'-joined sequence of event_label (from int_conversation_log)
+          for every message in the conversation — the message-by-message story
+          of what happened.
+      - name: opening_sentiment
+        description: sentiment_score of the conversation's first message.
+        tests:
+          - between:
+              min_value: -1
+              max_value: 1
+      - name: closing_sentiment
+        description: sentiment_score of the conversation's last message.
+        tests:
+          - between:
+              min_value: -1
+              max_value: 1
+      - name: sentiment_delta
+        description: closing_sentiment minus opening_sentiment. Negative means the conversation soured.
+      - name: escalation_handoff_count
+        description: Count of messages where sender_type flips to support_agent from something else.
+        tests:
+          - non_negative
+      - name: delayed_reply_count
+        description: Count of messages arriving more than 900 seconds (15 min) after the previous one.
+        tests:
+          - non_negative
+      - name: duration_seconds
+        description: Seconds between the conversation's first and last message.
+        tests:
+          - non_negative
+
+  - name: int_at_risk_conversations
+    description: >
+      Conversations belonging to bookings in the top cancellation-risk decile
+      (see int_booking_cancellation_risk). Drill-down artifact for inspecting the
+      at-risk segment.
+    columns:
+      - name: conversation_id
+        description: Primary key, one row per conversation.
+        tests:
+          - unique
+          - not_null
+      - name: booking_id
+        description: Foreign key to int_booking_cancellation_risk. Booking this at-risk conversation belongs to.
+        tests:
+          - relationships:
+              to: ref('int_booking_cancellation_risk')
+              field: booking_id
+
+  - name: int_at_risk_conversation_concerns
+    description: >
+      Global top-5 customer concerns (by intent_category) across conversations
+      in the top cancellation-risk decile.
+    columns:
+      - name: intent_category
+        description: Concern/intent category.
+        tests:
+          - not_null
+      - name: concern_rank
+        description: Rank 1-5 by conversation_count descending.
+        tests:
+          - between:
+              min_value: 1
+              max_value: 5

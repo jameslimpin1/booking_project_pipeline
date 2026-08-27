@@ -1,0 +1,11 @@
+booking_id,user_id,property_id,host_id,checkin_date,checkout_date,total_price,conversation_count,has_cancellation_or_refund_intent,has_escalated_conversation,avg_csat_score,avg_sentiment_score,pct_negative_messages,avg_first_response_time_seconds,avg_resolution_time_seconds,cancellation_risk_score,risk_percentile,conversation_id,conversation_primary_intent,conversation_status
+114479,48950,3623,3161,2024-08-27,2024-09-02,475.23,1,1,1,1.0,-0.506,1.0,1972.0,2836.0,0.8391,0.0,58945,refund_request,escalated
+18900,25495,5209,1271,2025-04-15,2025-04-25,3120.62,1,1,1,1.0,-0.587,0.9,1055.0,1115.0,0.8275,0.0,90582,refund_request,escalated
+102293,35686,8758,3794,2024-02-12,2024-02-22,2057.77,1,1,1,1.0,-0.537,0.9,3058.0,4845.0,0.8268,0.0,42474,refund_request,escalated
+19035,11579,6904,560,2024-08-04,2024-08-11,1838.97,1,1,1,1.0,-0.437,0.909,5307.0,5367.0,0.8155,0.0,69565,refund_request,escalated
+195702,46268,166,2805,2024-05-23,2024-06-04,2062.89,1,1,1,1.0,-0.383,0.875,663.0,5264.0,0.8093,0.0,35072,refund_request,escalated
+235944,37850,1767,2383,2025-02-04,2025-02-09,468.45,1,1,1,1.0,-0.451,0.833,1066.0,4911.0,0.8064,0.0001,78769,refund_request,escalated
+248492,23982,4423,661,2024-11-04,2024-11-09,1667.95,1,1,1,2.0,-0.467,1.0,1866.0,3499.0,0.8041,0.0001,44955,refund_request,escalated
+175357,33663,4273,459,2024-10-12,2024-10-18,629.81,1,1,1,2.0,-0.771,1.0,38.0,1709.0,0.8029,0.0001,26001,refund_request,escalated
+18770,947,7212,678,2024-03-20,2024-03-24,662.12,1,1,1,1.0,-0.348,0.9,305.0,3456.0,0.8004,0.0001,19259,refund_request,escalated
+53653,27210,1503,92,2024-06-10,2024-06-17,1437.43,1,1,1,1.0,-0.523,0.833,796.0,1365.0,0.7988,0.0001,39534,refund_request,escalated

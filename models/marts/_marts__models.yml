@@ -1,0 +1,235 @@
+version: 2
+
+models:
+  - name: mart_booking_loss_events
+    description: >
+      Master fact table behind the "Why We Lose Bookings" dashboard: one row per
+      conversation in the trailing 12 months (anchored to the most recent
+      conversation in the data), joined to that conversation's booking
+      price/outcome and the guest's loyalty tier. Adds two derived
+      classifications reused by every downstream mart — journey_stage (WHERE in
+      the conversation things went wrong) and event_pattern (WHAT happened, as
+      one mutually-exclusive category per row, assigned by priority so summing
+      cancelled_price across event_pattern for a month equals that month's true
+      revenue lost, with no double-counting). Grain is CONVERSATION, not
+      booking — a booking with two conversations in the window contributes two
+      rows. This matches how the dashboard's published "bookings" figures have
+      always been computed; check downstream aggregates before deduping.
+    tests:
+      - value_matches_upstream:
+          column_name: total_price
+          compare_model: ref('stg_fact_bookings')
+          join_key: booking_id
+    columns:
+      - name: conversation_id
+        description: Primary key, one row per conversation.
+        tests:
+          - unique
+          - not_null
+      - name: journey_stage
+        description: >
+          One of 1_opening / 2_early_mid / 3_late_mid / 4_closing. Proxy for
+          where in the conversation the guest went negative: 4_closing when
+          there's no negative message at all, 1_opening when the very first
+          message is negative, 3_late_mid when sentiment worsens sharply by
+          the end, 2_early_mid otherwise.
+        tests:
+          - accepted_values:
+              values: ['1_opening', '2_early_mid', '3_late_mid', '4_closing']
+      - name: event_pattern
+        description: >
+          Mutually-exclusive "what happened" category, first match wins in this
+          priority order: unanswered_opening > escalated_and_delayed >
+          escalated_support > delayed_reply > ends_frustrated > negative_opening
+          > multiple_negative > sentiment_worsened > long_conversation >
+          low_csat > no_pattern (catches cancellations matching none of the
+          above, so the category is exhaustive).
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - unanswered_opening
+                - escalated_and_delayed
+                - escalated_support
+                - delayed_reply
+                - ends_frustrated
+                - negative_opening
+                - multiple_negative
+                - sentiment_worsened
+                - long_conversation
+                - low_csat
+                - no_pattern
+      - name: topic_cluster
+        description: complaint / everyday / praise, grouped from conversation_primary_intent.
+      - name: is_cancelled
+        description: True when the linked booking's status is 'cancelled'.
+      - name: total_price
+        description: The linked booking's total_price, carried onto every conversation row for that booking.
+        tests:
+          - non_negative
+
+  - name: mart_loss_by_month_pattern
+    description: >
+      Powers the dashboard's month x event-pattern impact heatmap. Grain: one
+      row per (month, channel, loyalty_tier, event_pattern). cancelled_price
+      sums are safe to add across event_pattern for a fixed month, because
+      mart_booking_loss_events.event_pattern is mutually exclusive.
+    tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month, channel, loyalty_tier, event_pattern]
+      - agg_matches_upstream:
+          column_name: cancelled_price
+          compare_model: ref('mart_booking_loss_events')
+          compare_column_expr: "case when is_cancelled then total_price else 0 end"
+    columns:
+      - name: month
+        description: Activity month, 'YYYY-MM'.
+        tests:
+          - not_null
+      - name: event_pattern
+        description: See mart_booking_loss_events.event_pattern.
+        tests:
+          - not_null
+      - name: cancelled_price
+        description: Dollar value of bookings in this cell that ended up cancelled.
+        tests:
+          - non_negative
+
+  - name: mart_loss_by_stage
+    description: >
+      Powers the dashboard's "which part of the journey do we usually lose"
+      table and the revenue-lost hero stats (both are this table filtered/
+      resummed by the page's month/channel/tier slicers). Grain: one row per
+      (month, channel, loyalty_tier, journey_stage). Carries both total_price
+      and cancelled_price so "% of value lost" can be computed downstream.
+    tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month, channel, loyalty_tier, journey_stage]
+      - agg_matches_upstream:
+          column_name: total_price
+          compare_model: ref('mart_booking_loss_events')
+      - agg_matches_upstream:
+          column_name: cancelled_price
+          compare_model: ref('mart_booking_loss_events')
+          compare_column_expr: "case when is_cancelled then total_price else 0 end"
+    columns:
+      - name: journey_stage
+        description: See mart_booking_loss_events.journey_stage.
+        tests:
+          - not_null
+      - name: total_price
+        description: Total booking value of every conversation in this cell (cancelled or not).
+        tests:
+          - non_negative
+      - name: cancelled_price
+        description: Dollar value lost to cancellation in this cell.
+        tests:
+          - non_negative
+
+  - name: mart_complaint_cohort
+    description: >
+      Powers the dashboard's "Top 5 complaints" / "Top 5 everyday questions"
+      panels and the "which complaints hurt each cohort most" loyalty-tier
+      breakdown. Grain: one row per (month, channel, loyalty_tier,
+      intent_category).
+    tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month, channel, loyalty_tier, intent_category]
+      - agg_matches_upstream:
+          column_name: total_price
+          compare_model: ref('mart_booking_loss_events')
+      - agg_matches_upstream:
+          column_name: cancelled_price
+          compare_model: ref('mart_booking_loss_events')
+          compare_column_expr: "case when is_cancelled then total_price else 0 end"
+    columns:
+      - name: intent_category
+        description: Conversation topic label (e.g. refund_request, wifi_issue).
+        tests:
+          - not_null
+      - name: topic_cluster
+        description: complaint / everyday / praise grouping for intent_category.
+      - name: cancelled_price
+        description: Dollar value of bookings in this cell that ended up cancelled.
+        tests:
+          - non_negative
+
+  - name: mart_price_quintile_risk
+    description: >
+      Powers the "booking value doesn't predict who cancels, but it predicts
+      what it costs us" chart. Splits the trailing-12-month population into 5
+      equal-sized groups by total_price. Cancellation rate is flat across
+      groups by design of the underlying data; revenue_lost_to_cancellation is
+      not, since it scales with price — that contrast is the point of the chart.
+    tests:
+      - agg_matches_upstream:
+          column_name: revenue_lost_to_cancellation
+          compare_model: ref('mart_booking_loss_events')
+          compare_column_expr: "case when is_cancelled then total_price else 0 end"
+    columns:
+      - name: price_quintile
+        description: 1 (cheapest 20%) through 5 (most expensive 20%).
+        tests:
+          - unique
+          - not_null
+          - between:
+              min_value: 1
+              max_value: 5
+      - name: cancellation_rate_pct
+        description: Share of bookings in this quintile that cancelled, as a percentage.
+        tests:
+          - between:
+              min_value: 0
+              max_value: 100
+      - name: revenue_lost_to_cancellation
+        description: Total booking value lost to cancellation within this quintile.
+        tests:
+          - non_negative
+
+  - name: mart_unanswered_opening_monthly
+    description: >
+      Monthly cohort view of the "unanswered opening message" pattern — the
+      single strongest driver found in the loss analysis (1.58x the baseline
+      cancellation rate). Volume is thin (as few as 0-11 cases/month), so
+      unanswered_opening_cancel_rate_pct swings between 0% and ~38% from small-
+      sample noise alone; treat the pooled 12-month rate (see
+      mart_booking_loss_events where event_pattern = 'unanswered_opening') as
+      the reliable number, not any single month here.
+    tests:
+      - agg_matches_upstream:
+          column_name: total_bookings_in_cohort
+          model_agg: sum
+          compare_model: ref('mart_booking_loss_events')
+          compare_agg: count
+      - agg_matches_upstream:
+          column_name: unanswered_opening_bookings
+          model_agg: sum
+          compare_model: ref('mart_booking_loss_events')
+          compare_agg: count
+          compare_where: "event_pattern = 'unanswered_opening'"
+    columns:
+      - name: month
+        description: Activity month, 'YYYY-MM'.
+        tests:
+          - unique
+          - not_null
+      - name: cohort_base_cancel_rate_pct
+        description: Baseline cancellation rate across all bookings in the month's cohort.
+        tests:
+          - between:
+              min_value: 0
+              max_value: 100
+      - name: pct_unanswered_opening
+        description: Share of the month's bookings whose conversation had an unanswered opening message.
+        tests:
+          - between:
+              min_value: 0
+              max_value: 100
+      - name: unanswered_opening_cancel_rate_pct
+        description: >
+          Cancellation rate among that month's unanswered-opening bookings.
+          Null when the month had zero such bookings (0/0).
+        tests:
+          - between:
+              min_value: 0
+              max_value: 100

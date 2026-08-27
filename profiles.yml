@@ -1,0 +1,7 @@
+booking_messaging_rewards:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "warehouse/booking.duckdb"
+      threads: 4

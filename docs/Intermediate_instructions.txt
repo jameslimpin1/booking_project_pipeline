@@ -1,0 +1,9 @@
+Intermediate Layer Requirements:
+
+1. I want to first focus on getting the top 10% transactions with the 
+    highest risk of cancellation, and the most frustrated costumers
+2. What we need to get from our intermediate layer is to sniff out the 
+    conversations from these and what are the top 5 concerns of the customers
+3. Let's evaluate the current data on how we can approach this
+
+

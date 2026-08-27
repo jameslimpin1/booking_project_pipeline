@@ -1,0 +1,5 @@
+stage_label,message_count,conversation_count,avg_sentiment_score,pct_negative_messages,avg_response_latency_seconds,corr_sentiment_vs_risk,avg_sentiment_in_top_risk_decile,avg_sentiment_not_top_risk_decile,pct_negative_in_top_risk_decile,pct_cancel_refund_intent
+1_opening,102938,39150,-0.112,0.402,184.9,-0.2804,-0.21,-0.0704,0.5233,0.1403
+2_early_mid,93160,39098,-0.1123,0.4009,299.4,-0.2856,-0.2114,-0.0702,0.5217,0.1399
+3_late_mid,83460,38917,-0.1123,0.3993,298.9,-0.2866,-0.2112,-0.0704,0.5215,0.1396
+4_closing,73723,38362,-0.1099,0.3974,297.9,-0.2789,-0.2053,-0.0695,0.5164,0.1402
