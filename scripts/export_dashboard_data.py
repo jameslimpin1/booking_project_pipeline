@@ -11,6 +11,11 @@ blocks. This script re-queries the marts that feed each block, rebuilds the
 JSON with the exact same shape, and replaces the block in place -- everything
 else in the HTML (layout, JS, styling) is left untouched.
 
+conv-profile-data (the "Conversation profile" small-multiples section)
+aggregates the FULL population in mart_booking_loss_events by month, not the
+curated drill-down set below -- the drill-down set is risk-weighted and
+would misrepresent the true mix if used for that section.
+
 The drill-down conversation set (dd-data) is chosen deterministically so the
 same 216 conversations come back on every re-run against unchanged data:
 every unanswered_opening conversation (currently 86), the 50 highest
@@ -85,6 +90,42 @@ def build_impact_agg_data(con):
         from main_marts.mart_loss_by_month_pattern
         order by month, channel, loyalty_tier, category
     """)
+
+
+def build_conv_profile_data(con):
+    # Month x value counts over the FULL population (mart_booking_loss_events,
+    # ~72K conversations) for each of 6 dimensions -- deliberately NOT the
+    # curated 216-conversation drill-down set, which is risk-weighted and
+    # would misrepresent the true mix (e.g. CSAT skews heavily low there).
+    # Client-side JS sums across whatever month range the date slider covers.
+    dimension_exprs = {
+        "booking_outcome": "booking_status",
+        "primary_intent": "conversation_primary_intent",
+        "channel": "conversation_channel",
+        "loyalty_tier": "loyalty_tier",
+        "csat": "case when csat_score is null then '—' else csat_score::varchar || ' / 5' end",
+        "messages": """
+            case
+                when conversation_message_count <= 1 then '1'
+                when conversation_message_count <= 3 then '2–3'
+                when conversation_message_count <= 6 then '4–6'
+                when conversation_message_count <= 10 then '7–10'
+                else '11+'
+            end
+        """,
+    }
+    return {
+        key: rows_and_cols(con, f"""
+            select
+                activity_month as month,
+                {expr} as value,
+                count(*) as count
+            from main_marts.mart_booking_loss_events
+            group by 1, 2
+            order by 1, 2
+        """)
+        for key, expr in dimension_exprs.items()
+    }
 
 
 def build_dd_data(con):
@@ -206,6 +247,7 @@ def main():
     rev_agg_data = build_rev_agg_data(con)
     agg_data = build_agg_data(con)
     impact_agg_data = build_impact_agg_data(con)
+    conv_profile_data = build_conv_profile_data(con)
     dd_data = build_dd_data(con)
     con.close()
 
@@ -217,6 +259,7 @@ def main():
         "agg-data": agg_data,
         "rev-agg-data": rev_agg_data,
         "impact-agg-data": impact_agg_data,
+        "conv-profile-data": conv_profile_data,
         "dd-data": dd_data,
     })
     print("Done.")
