@@ -88,9 +88,16 @@ def build_impact_agg_data(con):
 
 
 def build_dd_data(con):
+    # order by conversation_id here (and nowhere else naturally sorts this
+    # query) so tags/selected_ids below have a stable, rebuild-independent
+    # iteration order -- otherwise the *set* of unanswered_opening ids is
+    # correct but their order (and so the tags dict's key order in the
+    # output JSON) varies with table scan order, producing a spurious diff
+    # on every refresh even when nothing actually changed.
     unanswered_ids = [r[0] for r in con.execute("""
         select conversation_id from main_marts.mart_booking_loss_events
         where event_pattern = 'unanswered_opening'
+        order by conversation_id
     """).fetchall()]
 
     high_risk_ids = [r[0] for r in con.execute("""
