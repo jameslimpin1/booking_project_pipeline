@@ -85,8 +85,8 @@ via `dbt docs generate && dbt docs serve`.
 
 Static HTML/JS prototype consuming the marts above:
 
-- `dashboard_prototype.html` — main "Why We Lose Bookings" report (KPIs, loss-by-stage table, month × pattern heatmap, complaint cohorts, price-quintile chart)
-- `dashboard_prototype_page2.html` — customer-journey / Sankey drill-down view
+- `index.html` — main "Why We Lose Bookings" report (KPIs, loss-by-stage table, month × pattern heatmap, complaint cohorts, price-quintile chart). Single canonical entry point, served at the repo's Pages root.
+- `dashboard_prototype_page2.html` — customer-journey / Sankey drill-down view, reachable from `index.html`'s nav bar
 
 Its data is exported from this repo's warehouse by `scripts/export_dashboard_data.py` —
 see [Keeping the dashboard fresh](#keeping-the-dashboard-fresh).

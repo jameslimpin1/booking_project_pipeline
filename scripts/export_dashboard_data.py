@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Refreshes the JSON data embedded in dashboard_prototype.html / _page2.html
+Refreshes the JSON data embedded in index.html / dashboard_prototype_page2.html
 (in the separate booking_project_dashboard repo) from the current dbt
 warehouse in this repo. Run this after `dbt build` (see
 scripts/refresh_pipeline.sh) -- it does not run dbt itself.
@@ -252,7 +252,7 @@ def main():
     con.close()
 
     print(f"Refreshing dashboard HTML in {dashboard_dir} from the current warehouse...")
-    refresh_file(dashboard_dir / "dashboard_prototype.html", {
+    refresh_file(dashboard_dir / "index.html", {
         "rev-agg-data": rev_agg_data,
     })
     refresh_file(dashboard_dir / "dashboard_prototype_page2.html", {
