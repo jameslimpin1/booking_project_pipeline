@@ -17,10 +17,10 @@ curated drill-down set below -- the drill-down set is risk-weighted and
 would misrepresent the true mix if used for that section.
 
 The drill-down conversation set (dd-data) is chosen deterministically so the
-same 216 conversations come back on every re-run against unchanged data:
-every unanswered_opening conversation (currently 86), the 50 highest
-cancellation-risk bookings, and an 80-conversation deterministic sample of
-everything else -- see the card copy in dashboard_prototype_page2.html.
+same 250 conversations come back on every re-run against unchanged data: the
+200 highest cancellation-risk bookings, plus a 50-conversation deterministic
+sample of everything else as a "typical" contrast set -- see the card copy
+in dashboard_prototype_page2.html.
 
 Requires booking_project_dashboard to be checked out as a sibling directory
 by default (../booking_project_dashboard) -- override with --dashboard-dir
@@ -38,8 +38,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WAREHOUSE_PATH = PROJECT_ROOT / "warehouse" / "booking.duckdb"
 DEFAULT_DASHBOARD_DIR = PROJECT_ROOT.parent / "booking_project_dashboard"
 
-HIGH_RISK_N = 50
-TYPICAL_N = 80
+HIGH_RISK_N = 200
+TYPICAL_N = 50
 SAMPLE_SEED = 42
 
 
@@ -95,7 +95,7 @@ def build_impact_agg_data(con):
 def build_conv_profile_data(con):
     # Month x value counts over the FULL population (mart_booking_loss_events,
     # ~72K conversations) for each of 6 dimensions -- deliberately NOT the
-    # curated 216-conversation drill-down set, which is risk-weighted and
+    # curated 250-conversation drill-down set, which is risk-weighted and
     # would misrepresent the true mix (e.g. CSAT skews heavily low there).
     # Client-side JS sums across whatever month range the date slider covers.
     dimension_exprs = {
@@ -147,26 +147,19 @@ def build_conv_profile_data(con):
 def build_dd_data(con):
     # order by conversation_id here (and nowhere else naturally sorts this
     # query) so tags/selected_ids below have a stable, rebuild-independent
-    # iteration order -- otherwise the *set* of unanswered_opening ids is
-    # correct but their order (and so the tags dict's key order in the
-    # output JSON) varies with table scan order, producing a spurious diff
-    # on every refresh even when nothing actually changed.
-    unanswered_ids = [r[0] for r in con.execute("""
-        select conversation_id from main_marts.mart_booking_loss_events
-        where event_pattern = 'unanswered_opening'
-        order by conversation_id
-    """).fetchall()]
-
+    # iteration order -- otherwise the *set* of high_risk ids is correct but
+    # their order (and so the tags dict's key order in the output JSON)
+    # varies with table scan order, producing a spurious diff on every
+    # refresh even when nothing actually changed.
     high_risk_ids = [r[0] for r in con.execute("""
         select m.conversation_id
         from main_marts.mart_booking_loss_events m
         inner join main_intermediate.int_booking_cancellation_risk r using (booking_id)
-        where m.conversation_id not in (select unnest($unanswered))
         order by r.cancellation_risk_score desc, m.conversation_id
         limit $n
-    """, {"unanswered": unanswered_ids, "n": HIGH_RISK_N}).fetchall()]
+    """, {"n": HIGH_RISK_N}).fetchall()]
 
-    excluded = unanswered_ids + high_risk_ids
+    excluded = high_risk_ids
     # Deterministic by conversation_id value, not table scan order: DuckDB's
     # `USING SAMPLE ... (reservoir, seed)` only reproduces the same rows if
     # the table's physical scan order is unchanged, which a `dbt build
@@ -183,7 +176,7 @@ def build_dd_data(con):
         limit {TYPICAL_N}
     """, {"excluded": excluded}).fetchall()]
 
-    selected_ids = unanswered_ids + high_risk_ids + typical_ids
+    selected_ids = high_risk_ids + typical_ids
 
     con.execute(
         "create or replace temp table selected_conv_ids as select unnest($ids) as conversation_id",
@@ -211,8 +204,6 @@ def build_dd_data(con):
     """)
 
     tags = {}
-    for cid in unanswered_ids:
-        tags.setdefault(str(cid), []).append("unanswered_opening")
     for cid in high_risk_ids:
         tags.setdefault(str(cid), []).append("high_risk")
     for cid in typical_ids:
